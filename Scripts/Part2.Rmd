@@ -7,7 +7,7 @@ output: html_document
 
 ## Introduction
 
-This part is about RMP biases chicken gut microbiota development and microbial interactions.
+RMP biases chicken gut microbiota development and microbial interactions.
 
 ## Load the packages
 
