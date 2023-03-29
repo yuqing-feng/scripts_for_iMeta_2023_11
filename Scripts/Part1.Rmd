@@ -21,6 +21,7 @@ library(patchwork)
 library(tibble)
 library(vegan)
 library(tidyverse)
+library(tidyselect)
 ```
 
 ### Figure S1A Prevalence of archaea in the gut four segments
