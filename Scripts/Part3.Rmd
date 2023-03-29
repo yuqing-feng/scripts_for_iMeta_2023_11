@@ -7,7 +7,7 @@ output: html_document
 
 ## Introduction
 
-This part is about ecological deterministic and stochastic processes shape the segment-specific community types.
+Ecological deterministic and stochastic processes shape the segment-specific community types.
 
 ## Load the packages
 
