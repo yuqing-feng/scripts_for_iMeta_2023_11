@@ -1,7 +1,7 @@
 # Title
 Quantitative microbiome profiling reveals the developmental trajectory of the chicken gut microbiota and its connection to host metabolism
 
-# Author
+# Authors
 Yuqing Feng, Meihong Zhang, Yan Liu, Xinyue Yang, Fuxiao Wei, Xiaolu Jin, Dan Liu, Yuming Guo, Yongfei Hu
 
 # Journal
@@ -9,9 +9,7 @@ iMeta
 
 
 # Description
-This is the repo of the data and R script for this study.
-
-This includes seven parts:
+This study includes seven parts:
 
 1. The abundance and diversity of the chicken gut microbiota reach a plateau at 7 DPH
 
@@ -27,7 +25,7 @@ This includes seven parts:
 
 7. QMP of gut microbiota establishes connections between microbes and chicken serum metabolites
 
-# Email:
+# Email
 fengyuqing2012@gmail.com
 
 
