@@ -4,8 +4,9 @@ Quantitative microbiome profiling reveals the developmental trajectory of the ch
 # Author
 Yuqing Feng, Meihong Zhang, Yan Liu, Xinyue Yang, Fuxiao Wei, Xiaolu Jin, Dan Liu, Yuming Guo, Yongfei Hu
 
-# Journal: 
+# Journal
 iMeta
+
 
 This is the repo of the data and R script for this study.
 
