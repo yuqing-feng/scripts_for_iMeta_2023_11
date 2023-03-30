@@ -26,6 +26,4 @@ This study includes seven parts:
 7. QMP of gut microbiota establishes connections between microbes and chicken serum metabolites
 
 # Email
-fengyuqing2012@gmail.com
-
-
+fengyuqing2012 at gmail.com
