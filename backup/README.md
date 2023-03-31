@@ -1,7 +1,10 @@
-This is a backup of all R packages used in this study.
+## This is a backup of all R packages used in this study.
 
-OS: macOS 10.14.1
-R version: R4.1.0
+## Operation system
+macOS 10.14.1
+
+## R version
+R4.1.0
 
 ## List of R packages used in this study
 | Package              | Version | 
