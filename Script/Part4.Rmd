@@ -1,0 +1,646 @@
+---
+title: "Part4"
+author: "Yuqing Feng"
+date: "3/29/2023"
+output: html_document
+---
+
+## Introduction
+
+Chicken gut microbes have different colonization abilities
+
+## Load packages
+
+```{r}
+rm(list = ls())
+
+# CRAN
+packages_from_cran = c('dplyr','reshape2','tibble','openxlsx','ggExtra','UpSetR','patchwork','BiocManager','ggplot2')
+for(p in packages_from_cran){if (!requireNamespace(p)){install.packages(p)}
+    library(p, character.only = TRUE, quietly = TRUE, warn.conflicts = FALSE)}
+
+# Bioconductor
+if (!requireNamespace("DirichletMultinomial", quietly = TRUE))
+    BiocManager::install("DirichletMultinomial")
+library(DirichletMultinomial)
+```
+
+### Figure S6 Longitudinal occurrence patterns of the bacterial genera in the chicken gut.
+
+```{r}
+raw_16S_L6 <- read.csv('../Data/02micro/dmm/level-6_no_archaea.csv')
+format_16S_L6 <- raw_16S_L6 %>%
+  remove_rownames %>% 
+  column_to_rownames(var="index") %>%
+  select(-c('Group1','Group2'))%>%
+  as.matrix() 
+raw_ITS_L6 <- read.csv('../Data/02micro/ITS/level-6_for_bar.csv')
+format_ITS_L6 <- raw_ITS_L6 %>%
+  remove_rownames %>% 
+  column_to_rownames(var="X") %>%
+  select(-c('Group1','Group2'))%>%
+  as.matrix() 
+group_store <- data.frame(raw_16S_L6$index,substring(raw_16S_L6$index,1,3),substring(raw_16S_L6$index,7,7))
+colnames(group_store) <- c('ID','DPH','Segment')
+data_16S_D <- format_16S_L6[group_store$Segment=='D',] 
+data_16S_J <- format_16S_L6[group_store$Segment=='J',]
+data_16S_I <- format_16S_L6[group_store$Segment=='I',]
+data_16S_C <- format_16S_L6[group_store$Segment=='C',]
+
+data_ITS_D <- format_ITS_L6[group_store$Segment=='D',] 
+data_ITS_J <- format_ITS_L6[group_store$Segment=='J',]
+data_ITS_I <- format_ITS_L6[group_store$Segment=='I',]
+data_ITS_C <- format_ITS_L6[group_store$Segment=='C',]
+
+set.seed(1234)
+fit_16S_D <- lapply(1:6, dmn, count = data_16S_D, verbose = TRUE)
+cluster_16S_D <- data.frame(apply(mixture(fit_16S_D[[which.min(sapply(fit_16S_D, laplace))]]), 1, which.max)) 
+set.seed(1234)
+fit_16S_J <- lapply(1:6, dmn, count = data_16S_J, verbose = TRUE)
+cluster_16S_J <- data.frame(apply(mixture(fit_16S_J[[which.min(sapply(fit_16S_J, laplace))]]), 1, which.max))
+set.seed(1234)
+fit_16S_I <- lapply(1:6, dmn, count = data_16S_I, verbose = TRUE)
+cluster_16S_I <- data.frame(apply(mixture(fit_16S_I[[which.min(sapply(fit_16S_I, laplace))]]), 1, which.max))
+set.seed(1234)
+fit_16S_C <- lapply(1:6, dmn, count = data_16S_C, verbose = TRUE)
+cluster_16S_C <- data.frame(apply(mixture(fit_16S_C[[which.min(sapply(fit_16S_C, laplace))]]), 1, which.max))
+
+set.seed(1234)
+fit_ITS_D <- lapply(1:6, dmn, count = data_ITS_D, verbose = TRUE)
+cluster_ITS_D <- data.frame(apply(mixture(fit_ITS_D[[which.min(sapply(fit_ITS_D, laplace))]]), 1, which.max)) 
+set.seed(1234)
+fit_ITS_J <- lapply(1:6, dmn, count = data_ITS_J, verbose = TRUE)
+cluster_ITS_J <- data.frame(apply(mixture(fit_ITS_J[[which.min(sapply(fit_ITS_J, laplace))]]), 1, which.max))
+set.seed(1234)
+fit_ITS_I <- lapply(1:6, dmn, count = data_ITS_I, verbose = TRUE)
+cluster_ITS_I <- data.frame(apply(mixture(fit_ITS_I[[which.min(sapply(fit_ITS_I, laplace))]]), 1, which.max))
+set.seed(1234)
+fit_ITS_C <- lapply(1:6, dmn, count = data_ITS_C, verbose = TRUE)
+cluster_ITS_C <- data.frame(apply(mixture(fit_ITS_C[[which.min(sapply(fit_ITS_C, laplace))]]), 1, which.max))
+
+cluster_16S <- cbind(cluster_16S_D,cluster_16S_J,cluster_16S_I,cluster_16S_C)
+cluster_ITS <- cbind(cluster_ITS_D,cluster_ITS_J,cluster_ITS_I,cluster_ITS_C)
+colnames(cluster_16S) <- colnames(cluster_ITS) <- c('Duodenum','Jejunum','Ileum','Cecum')
+cluster_16S$DPH <- rep(c('D1','D4','D7','D14','D21','D28','D35','D42'),each = 10)
+
+binary_16S <- format_16S_L6
+binary_ITS <- format_ITS_L6
+for(i in 1:nrow(format_16S_L6)){
+  for(j in 1:ncol(format_16S_L6)){
+    if(format_16S_L6[i,j]!=0){
+      binary_16S[i,j] <- 1
+    }
+  }
+}
+for(i in 1:nrow(format_ITS_L6)){
+  for(j in 1:ncol(format_ITS_L6)){
+    if(format_ITS_L6[i,j]!=0){
+      binary_ITS[i,j] <- 1
+    }
+  }
+}
+
+ids_bacteria <- read.xlsx('../Data/02micro/phase/taxa.xlsx',sheet = 1)
+ids_fungi <- read.xlsx('../Data/02micro/phase/taxa.xlsx', sheet = 2)
+colnames(binary_16S) <- ids_bacteria$Genus
+colnames(binary_ITS) <- ids_fungi$Genus
+binary_16S_D <- cbind(binary_16S,group_store) %>%
+  filter(Segment=='D') %>%
+  select(-c(Segment,ID)) %>%
+  group_by(DPH) %>% 
+  summarise(across(everything(), sum)) %>%
+  column_to_rownames(var='DPH')
+
+binary_16S_J <- cbind(binary_16S, group_store) %>%
+  filter(Segment=='J') %>%
+  select(-c(Segment,ID)) %>%
+  group_by(DPH) %>%
+  summarise(across(everything(), sum)) %>%
+  column_to_rownames(var='DPH')
+
+binary_16S_I <- cbind(binary_16S, group_store) %>%
+  filter(Segment=='I') %>%
+  select(-c(Segment,ID)) %>%
+  group_by(DPH) %>%
+  summarise(across(everything(), sum)) %>%
+  column_to_rownames(var='DPH')
+
+binary_16S_C <- cbind(binary_16S, group_store) %>%
+  filter(Segment =='C') %>%
+  select(-c(Segment,ID)) %>%
+  group_by(DPH) %>%
+  summarise(across(everything(), sum)) %>%
+  column_to_rownames(var='DPH')
+
+binary_ITS_D <- cbind(binary_ITS,group_store) %>%
+  filter(Segment=='D') %>%
+  select(-c(Segment,ID)) %>%
+  group_by(DPH) %>% 
+  summarise(across(everything(), sum)) %>%
+  column_to_rownames(var='DPH')
+
+binary_ITS_J <- cbind(binary_ITS, group_store) %>%
+  filter(Segment=='J') %>%
+  select(-c(Segment,ID)) %>%
+  group_by(DPH) %>%
+  summarise(across(everything(), sum)) %>%
+  column_to_rownames(var='DPH')
+
+binary_ITS_I <- cbind(binary_ITS, group_store) %>%
+  filter(Segment=='I') %>%
+  select(-c(Segment,ID)) %>%
+  group_by(DPH) %>%
+  summarise(across(everything(), sum)) %>%
+  column_to_rownames(var='DPH')
+
+binary_ITS_C <- cbind(binary_ITS, group_store) %>%
+  filter(Segment =='C') %>%
+  select(-c(Segment,ID)) %>%
+  group_by(DPH) %>%
+  summarise(across(everything(), sum)) %>%
+  column_to_rownames(var='DPH')
+
+con_2_2_pre <- function(data){
+  data <- data[,colSums(data)!=0]
+  data1 <- data
+  for(i in 1:nrow(data)){
+    for(j in 1:ncol(data)){
+      if(data[i,j]>0 & data[i,j]<9){
+        data1[i,j] <- 'B'
+      }
+    }
+  }
+  data1[data==9] <- 'C'
+  data1[data==10] <- 'C'
+  data1[data==0] <- 'A'
+  return(data1)
+}
+bin_16S_C2 <- con_2_2_pre(binary_16S_C)
+bin_16S_D2 <- con_2_2_pre(binary_16S_D)
+bin_16S_I2 <- con_2_2_pre(binary_16S_I)
+bin_16S_J2 <- con_2_2_pre(binary_16S_J)
+bin_ITS_C2 <- con_2_2_pre(binary_ITS_C) 
+bin_ITS_D2 <- con_2_2_pre(binary_ITS_D)
+bin_ITS_I2 <- con_2_2_pre(binary_ITS_I)
+bin_ITS_J2 <- con_2_2_pre(binary_ITS_J)
+
+count_16S_C1 <- t(bin_16S_C2) %>% as.data.frame() %>% group_by_all() %>% summarise(COUNT = n()) %>% arrange(desc(COUNT))
+count_16S_D1 <- t(bin_16S_D2) %>% as.data.frame() %>% group_by_all() %>% summarise(COUNT = n()) %>% arrange(desc(COUNT))
+count_16S_I1 <- t(bin_16S_I2) %>% as.data.frame() %>% group_by_all() %>% summarise(COUNT = n()) %>% arrange(desc(COUNT))
+count_16S_J1 <- t(bin_16S_J2) %>% as.data.frame() %>% group_by_all() %>% summarise(COUNT = n()) %>% arrange(desc(COUNT))
+count_ITS_C1 <- t(bin_ITS_C2) %>% as.data.frame() %>% group_by_all() %>% summarise(COUNT = n()) %>% arrange(desc(COUNT))
+count_ITS_D1 <- t(bin_ITS_D2) %>% as.data.frame() %>% group_by_all() %>% summarise(COUNT = n()) %>% arrange(desc(COUNT))
+count_ITS_I1 <- t(bin_ITS_I2) %>% as.data.frame() %>% group_by_all() %>% summarise(COUNT = n()) %>% arrange(desc(COUNT))
+count_ITS_J1 <- t(bin_ITS_J2) %>% as.data.frame() %>% group_by_all() %>% summarise(COUNT = n()) %>% arrange(desc(COUNT))
+
+count_16S_D2 <- data.frame(sort(table(apply(bin_16S_D2, 2, paste0, collapse="")),decreasing = T))
+count_16S_J2 <- data.frame(sort(table(apply(bin_16S_J2, 2, paste0, collapse="")),decreasing = T))
+count_16S_I2 <- data.frame(sort(table(apply(bin_16S_I2, 2, paste0, collapse="")),decreasing = T))
+count_16S_C2 <- data.frame(sort(table(apply(bin_16S_C2, 2, paste0, collapse="")),decreasing = T))
+count_ITS_D2 <- data.frame(sort(table(apply(bin_ITS_D2, 2, paste0, collapse="")),decreasing = T))
+count_ITS_J2 <- data.frame(sort(table(apply(bin_ITS_J2, 2, paste0, collapse="")),decreasing = T))
+count_ITS_I2 <- data.frame(sort(table(apply(bin_ITS_I2, 2, paste0, collapse="")),decreasing = T))
+count_ITS_C2 <- data.frame(sort(table(apply(bin_ITS_C2, 2, paste0, collapse="")),decreasing = T))
+
+count_16S_C3 <- data.frame(count_16S_C1,count_16S_C2)
+count_16S_D3 <- data.frame(count_16S_D1,count_16S_D2)
+count_16S_I3 <- data.frame(count_16S_I1,count_16S_I2)
+count_16S_J3 <- data.frame(count_16S_J1,count_16S_J2)
+count_ITS_C3 <- data.frame(count_ITS_C1,count_ITS_C2)
+count_ITS_D3 <- data.frame(count_ITS_D1,count_ITS_D2)
+count_ITS_I3 <- data.frame(count_ITS_I1,count_ITS_I2)
+count_ITS_J3 <- data.frame(count_ITS_J1,count_ITS_J2)
+
+conv_2_num <- function(data){
+  data0 <- data[,1:8]
+  data1 <- matrix(,nrow = nrow(data),ncol = 8)
+  print(dim(data0))
+  rownames(data1) <- data[,10]
+  for(i in 1:nrow(data0)){
+    for(j in 1:8){
+      if(data0[i,j]=='A'){data1[i,j] <- 0}
+      else if(data0[i,j]=='B'){data1[i,j] <- 1}
+      else if(data0[i,j]=='C'){data1[i,j] <- 2}
+    }
+  }
+  print(nrow(data0))
+  ID <- rep(rownames(data1),8)
+  Num <- c(data1[,1],data1[,2],data1[,3],data1[,4],data1[,5],data1[,6],data1[,7],data1[,8])
+  DPH <- rep(c('1','4','7','14','21','28','35','42'),each = nrow(data1))
+  data2 <- data.frame(ID,DPH,Num)
+  return(data2)
+}
+count_16S_C4 <- conv_2_num(count_16S_C3)
+count_16S_D4 <- conv_2_num(count_16S_D3)
+count_16S_I4 <- conv_2_num(count_16S_I3)
+count_16S_J4 <- conv_2_num(count_16S_J3)
+count_ITS_C4 <- conv_2_num(count_ITS_C3)
+count_ITS_D4 <- conv_2_num(count_ITS_D3)
+count_ITS_I4 <- conv_2_num(count_ITS_I3)
+count_ITS_J4 <- conv_2_num(count_ITS_J3)
+
+count_16S_C4$ID <- factor(count_16S_C4$ID, levels = rev(count_16S_C3$Var1))
+count_16S_C3$Var1 <- factor(count_16S_C3$Var1, levels = rev(count_16S_C3$Var1))
+count_16S_D4$ID <- factor(count_16S_D4$ID, levels = rev(count_16S_D3$Var1))
+count_16S_D3$Var1 <- factor(count_16S_D3$Var1, levels = rev(count_16S_D3$Var1))
+count_16S_I4$ID <- factor(count_16S_I4$ID, levels = rev(count_16S_I3$Var1))
+count_16S_I3$Var1 <- factor(count_16S_I3$Var1, levels = rev(count_16S_I3$Var1))
+count_16S_J4$ID <- factor(count_16S_J4$ID, levels = rev(count_16S_J3$Var1))
+count_16S_J3$Var1 <- factor(count_16S_J3$Var1, levels = rev(count_16S_J3$Var1))
+
+count_ITS_C4$ID <- factor(count_ITS_C4$ID, levels = rev(count_ITS_C3$Var1))
+count_ITS_C3$Var1 <- factor(count_ITS_C3$Var1, levels = rev(count_ITS_C3$Var1))
+count_ITS_D4$ID <- factor(count_ITS_D4$ID, levels = rev(count_ITS_D3$Var1))
+count_ITS_D3$Var1 <- factor(count_ITS_D3$Var1, levels = rev(count_ITS_D3$Var1))
+count_ITS_I4$ID <- factor(count_ITS_I4$ID, levels = rev(count_ITS_I3$Var1))
+count_ITS_I3$Var1 <- factor(count_ITS_I3$Var1, levels = rev(count_ITS_I3$Var1))
+count_ITS_J4$ID <- factor(count_ITS_J4$ID, levels = rev(count_ITS_J3$Var1))
+count_ITS_J3$Var1 <- factor(count_ITS_J3$Var1, levels = rev(count_ITS_J3$Var1))
+
+count_16S_C4$DPH <- factor(count_16S_C4$DPH, levels = c(1,4,7,14,21,28,35,42))
+f_C_b1 <- ggplot(count_16S_C4,aes(x = as.factor(DPH),y = ID, color = as.factor(Num))) + 
+  geom_point() + 
+  scale_color_manual(values = c('white','#3C54881f','#3C5488ff')) +
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        panel.border = element_blank(),axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        axis.ticks.length.x = unit(0,'cm'),
+        legend.position = 'none') + 
+  xlab('DPH') + ylab('Pattern')
+f_C_b2 <- ggplot(count_16S_C3,aes(x = Var1,y = Freq)) +
+  geom_bar(stat = 'identity',fill = '#3C5488') +
+  coord_flip() +
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        legend.position = 'none') +
+  ylab('Counts') + xlab('')
+
+count_16S_D4$DPH <- factor(count_16S_D4$DPH, levels = c(1,4,7,14,21,28,35,42))
+f_D_b1 <- ggplot(count_16S_D4,aes(x = as.factor(DPH),y = ID, color = as.factor(Num))) + 
+  geom_point() + 
+  scale_color_manual(values = c('white','#E64B351f','#E64B35ff')) +
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        panel.border = element_blank(),axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        axis.ticks.length.x = unit(0,'cm'),
+        legend.position = 'none') + 
+  xlab('DPH') + ylab('Pattern')
+f_D_b2 <- ggplot(count_16S_D3,aes(x = Var1,y = Freq)) +
+  geom_bar(stat = 'identity',fill = '#E64B35') +
+  coord_flip() +
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        legend.position = 'none') +
+  ylab('Counts') + xlab('')
+
+count_16S_I4$DPH <- factor(count_16S_I4$DPH, levels = c(1,4,7,14,21,28,35,42))
+f_I_b1 <- ggplot(count_16S_I4,aes(x = as.factor(DPH),y = ID, color = as.factor(Num))) + 
+  geom_point() + 
+  scale_color_manual(values = c('white','#00A0871f','#00A087ff')) +
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        panel.border = element_blank(),axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        axis.ticks.length.x = unit(0,'cm'),
+        legend.position = 'none') + 
+  xlab('DPH') + ylab('Pattern')
+f_I_b2 <- ggplot(count_16S_I3,aes(x = Var1,y = Freq)) +
+  geom_bar(stat = 'identity',fill = '#00A087') +
+  coord_flip() +
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        legend.position = 'none') +
+  ylab('Counts') + xlab('')
+
+count_16S_J4$DPH <- factor(count_16S_J4$DPH, levels = c(1,4,7,14,21,28,35,42))
+f_J_b1 <- ggplot(count_16S_J4,aes(x = as.factor(DPH),y = ID, color = as.factor(Num))) + 
+  geom_point() + 
+  scale_color_manual(values = c('white','#4DBBD51f','#4DBBD5ff')) +
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        panel.border = element_blank(),axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        axis.ticks.length.x = unit(0,'cm'),
+        legend.position = 'none') + 
+  xlab('DPH') + ylab('Pattern')
+f_J_b2 <- ggplot(count_16S_J3,aes(x = Var1,y = Freq)) +
+  geom_bar(stat = 'identity',fill = '#4DBBD5') +
+  coord_flip() +
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        legend.position = 'none') +
+  ylab('Counts') + xlab('')
+f_D_b1 + f_D_b2 +
+  f_J_b1 + f_J_b2 + 
+  f_I_b1 + f_I_b2 + 
+  f_C_b1 + f_C_b2 + plot_layout(nrow = 1)
+```
+
+### Figure S7 Longitudinal occurrence patterns of the fungal genera in the chicken gut.
+
+```{r}
+count_ITS_C4$DPH <- factor(count_ITS_C4$DPH, levels = c(1,4,7,14,21,28,35,42))
+f_C_f1 <- ggplot(count_ITS_C4,aes(x = as.factor(DPH),y = ID, color = as.factor(Num))) + 
+  geom_point() + 
+  scale_color_manual(values = c('white','#3C54881f','#3C5488ff')) +
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        panel.border = element_blank(),axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        axis.ticks.length.x = unit(0,'cm'),
+        legend.position = 'none') + 
+  xlab('DPH') + ylab('Pattern')
+f_C_f2 <- ggplot(count_ITS_C3,aes(x = Var1,y = Freq)) +
+  geom_bar(stat = 'identity',fill = '#3C5488') +
+  coord_flip() +
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        legend.position = 'none') +
+  ylab('Counts') + xlab('')
+count_ITS_D4$DPH <- factor(count_ITS_D4$DPH, levels = c(1,4,7,14,21,28,35,42))
+f_D_f1 <- ggplot(count_ITS_D4,aes(x = as.factor(DPH),y = ID, color = as.factor(Num))) + 
+  geom_point() + 
+  scale_color_manual(values = c('white','#E64B351f','#E64B35ff')) +
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        panel.border = element_blank(),axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        axis.ticks.length.x = unit(0,'cm'),
+        legend.position = 'none') + 
+  xlab('DPH') + ylab('Pattern')
+f_D_f2 <- ggplot(count_ITS_D3,aes(x = Var1,y = Freq)) +
+  geom_bar(stat = 'identity',fill = '#E64B35') +
+  coord_flip() +
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        legend.position = 'none') +
+  ylab('Counts') + xlab('')
+
+count_ITS_I4$DPH <- factor(count_ITS_I4$DPH, levels = c(1,4,7,14,21,28,35,42))
+f_I_f1 <- ggplot(count_ITS_I4,aes(x = as.factor(DPH),y = ID, color = as.factor(Num))) + 
+  geom_point() + 
+  scale_color_manual(values = c('white','#00A0871f','#00A087ff')) +
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        panel.border = element_blank(),axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        axis.ticks.length.x = unit(0,'cm'),
+        legend.position = 'none') + 
+  xlab('DPH') + ylab('Pattern')
+f_I_f2 <- ggplot(count_ITS_I3,aes(x = Var1,y = Freq)) +
+  geom_bar(stat = 'identity',fill = '#00A087') +
+  coord_flip() +
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        legend.position = 'none') +
+  ylab('Counts') + xlab('')
+count_ITS_J4$DPH <- factor(count_ITS_J4$DPH, levels = c(1,4,7,14,21,28,35,42))
+f_J_f1 <- ggplot(count_ITS_J4,aes(x = as.factor(DPH),y = ID, color = as.factor(Num))) + 
+  geom_point() + 
+  scale_color_manual(values = c('white','#4DBBD51f','#4DBBD5ff')) +
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        panel.border = element_blank(),axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        axis.ticks.length.x = unit(0,'cm'),
+        legend.position = 'none') + 
+  xlab('DPH') + ylab('Pattern')
+f_J_f2 <- ggplot(count_ITS_J3,aes(x = Var1,y = Freq)) +
+  geom_bar(stat = 'identity',fill = '#4DBBD5') +
+  coord_flip() +
+  theme_bw() +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        legend.position = 'none') +
+  ylab('Counts') + xlab('')
+f_D_f1 + f_D_f2 +
+  f_J_f1 + f_J_f2 + 
+  f_I_f1 + f_I_f2 + 
+  f_C_f1 + f_C_f2 + plot_layout(nrow = 1)
+
+
+```
+
+### Figure 4A Summary of the occurrence patterns matched the three categories (core, disappearance, and colonization) in the four segments.
+
+```{r}
+count_16S_C5 <- count_16S_C3[count_16S_C3$D01=='C'|count_16S_C3$D42=='C',]
+count_16S_C5
+count_16S_D5 <- count_16S_D3[count_16S_D3$D01=='C'|count_16S_D3$D42=='C',]
+count_16S_D5
+count_16S_I5 <- count_16S_I3[count_16S_I3$D01=='C'|count_16S_I3$D42=='C',]
+count_16S_I5
+count_16S_J5 <- count_16S_J3[count_16S_J3$D01=='C'|count_16S_J3$D42=='C',]
+count_16S_J5
+count_ITS_C5 <- count_ITS_C3[count_ITS_C3$D01=='C'|count_ITS_C3$D42=='C',]
+count_ITS_C5
+count_ITS_D5 <- count_ITS_D3[count_ITS_D3$D01=='C'|count_ITS_D3$D42=='C',]
+count_ITS_D5
+count_ITS_I5 <- count_ITS_I3[count_ITS_I3$D01=='C'|count_ITS_I3$D42=='C',]
+count_ITS_I5
+count_ITS_J5 <- count_ITS_J3[count_ITS_J3$D01=='C'|count_ITS_J3$D42=='C',]
+count_ITS_J5
+names_16S_C <- data.frame(apply(format(bin_16S_C2), 2, paste, collapse=""))
+names_16S_D <- data.frame(apply(format(bin_16S_D2), 2, paste, collapse=''))
+names_16S_I <- data.frame(apply(format(bin_16S_I2), 2, paste, collapse=''))
+names_16S_J <- data.frame(apply(format(bin_16S_J2), 2, paste, collapse=''))
+names_ITS_C <- data.frame(apply(format(bin_ITS_C2), 2, paste, collapse=""))
+names_ITS_D <- data.frame(apply(format(bin_ITS_D2), 2, paste, collapse=''))
+names_ITS_I <- data.frame(apply(format(bin_ITS_I2), 2, paste, collapse=''))
+names_ITS_J <- data.frame(apply(format(bin_ITS_J2), 2, paste, collapse=''))
+emerge <- c('ABBBBCCC','ABBBBBCC','AABBBCCC','AABBBBCC', 'AAAABBBC', 'ABBBCCCC', 'ABBCCCCC', 'AABBCCCC','AABCCCCC',
+            'ABCCCCCC','AACCCCCC', 'ACCCCCCC', 'BBBBCCCC', 'BBBBBBBC','BCCCCCCC')
+dismiss <- c('CBBBBBAA','CBBBBBBA','CAAAAAAA','CCCBBBBB','CCBBBBBB','CBBBBBBB','CCCCCCCB')
+num_bac_d <- c(5,0,0,0,0,0,0,0,0,0,0,0,5,0,0,9,0,0,0,0,0,0,0)
+num_fun_d <- c(5,0,0,0,0,0,0,0,0,0,0,0,1,0,0,7,0,0,0,0,1,2,1)
+num_bac_j <- c(2,0,0,0,0,0,0,0,0,0,0,0,13,0,0,4,0,0,0,0,0,0,1)
+num_fun_j <- c(11,0,0,0,0,0,0,0,0,0,0,0,9,0,0,18,1,1,3,0,0,5,1)
+num_bac_i <- c(1,0,0,0,0,0,0,0,0,0,0,0,2,0,0,3,0,0,0,0,0,0,1)
+num_fun_i <- c(8,0,0,0,0,0,0,0,0,0,0,0,1,1,1,7,0,0,1,1,1,2,1)
+num_bac_c <- c(2,1,1,1,1,1,2,4,6,8,14,1,21,0,0,3,0,0,0,0,0,0,0)
+num_fun_c <- c(6,0,0,0,0,0,0,0,0,0,0,0,3,0,0,8,0,1,1,1,1,2,1)
+
+numbers_pattern <- data.frame(ID = rep(c('CCCCCCCC',emerge,dismiss),8),
+                              Number = c(num_bac_d,num_bac_j,num_bac_i,num_bac_c,num_fun_d,num_fun_j,num_fun_i,num_fun_c),
+                              Segment = c(rep(c('Duodenum','Jejunum','Ileum','Cecum'),each = 23),
+                                          rep(c('Duodenum','Jejunum','Ileum','Cecum'),each = 23)),
+                              Kingdom = rep(c('Bacteria','Fungi'),each = 92))
+numbers_pattern$ID <- factor(numbers_pattern$ID, levels = c('CCCCCCCC',emerge,dismiss))
+corrs <- data.frame(ID = rep(c('CCCCCCCC',emerge,dismiss),8),
+                    Pattern = c('Present',rep('Colonize',15),rep('Passenger',7)))
+numbers_pattern2 <- merge(numbers_pattern,corrs, by.x = 'ID',by.y = 'ID',all.x=T)
+numbers_pattern2$Segment <- factor(numbers_pattern2$Segment,levels = c('Duodenum','Jejunum','Ileum','Cecum'))
+f41 <- ggplot(numbers_pattern2,aes(y = ID,x = Segment, fill = Number)) + geom_tile() +
+  scale_fill_gradientn(colors = rev(colorRampPalette(c("#E64B35", "white"))(10))[c(1,4,5,7:10)],breaks = c(0,1,5,10,15,21), limits=c(0,21)) +
+  facet_grid(Pattern~Kingdom,scales="free_y",space='free_y') +
+  theme_bw() + ylab('') + xlab('') +
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        axis.text.x = element_text(angle = 90,vjust = 1,hjust = 1),axis.text.y = element_blank(),
+        axis.ticks.length.y = unit(0,'cm'),legend.position = 'bottom')
+arrays <- data.frame(Cat = c(3,3,3,3,3,3,3,3,3,2,2,2,2,2,1,1,3,2,2,2,2,2,2,1,3,1,1,1,1,1,1,1,
+                             3,3,3,2,2,2,2,2,3,3,2,2,2,2,2,2,3,2,2,2,2,2,2,2,3,3,3,3,3,3,3,2,
+                             1,2,2,2,2,3,3,3,1,2,2,2,2,2,3,3,1,1,2,2,2,3,3,3,1,1,2,2,2,2,3,3,
+                             1,1,1,1,2,2,2,3,1,2,2,2,3,3,3,3,1,2,2,3,3,3,3,3,1,1,2,2,3,3,3,3,
+                             1,1,2,3,3,3,3,3,1,2,3,3,3,3,3,3,1,1,3,3,3,3,3,3,1,3,3,3,3,3,3,3,
+                             2,2,2,2,3,3,3,3,2,2,2,2,2,2,2,3,2,3,3,3,3,3,3,3),
+                     Pattern = rep(c('CCCCCCCC','CBBBBBAA','CBBBBBBA','CAAAAAAA','CCCBBBBB','CCBBBBBB','CBBBBBBB',
+                                     'CCCCCCCB','ABBBBCCC','ABBBBBCC','AABBBCCC','AABBBBCC','AAAABBBC','ABBBCCCC','ABBCCCCC',
+                                     'AABBCCCC','AABCCCCC','ABCCCCCC','AACCCCCC','ACCCCCCC','BBBBCCCC','BBBBBBBC',
+                                     'BCCCCCCC'),each = 8),
+                     Position = rep(c('P1','P2','P3','P4','P5','P6','P7','P8'),23))
+arrays1 <- merge(arrays, corrs,by.x = 'Pattern', by.y = 'ID',all.x = T)
+arrays$Pattern <- factor(arrays$Pattern,levels = c('CCCCCCCC','CBBBBBAA','CBBBBBBA','CAAAAAAA','CCCBBBBB','CCBBBBBB','CBBBBBBB',
+                                                   'CCCCCCCB','ABBBBCCC','ABBBBBCC','AABBBCCC','AABBBBCC','AAAABBBC','ABBBCCCC','ABBCCCCC',
+                                                   'AABBCCCC','AABCCCCC','ABCCCCCC','AACCCCCC','ACCCCCCC','BBBBCCCC','BBBBBBBC',
+                                                   'BCCCCCCC'))
+f42 <- ggplot(arrays1,aes(x = Position,y = Pattern,color = as.factor(Cat))) + geom_point(size = 5) +
+  facet_grid(`Pattern.y`~.,scales="free_y",space='free_y') + 
+  theme_bw() +
+  theme(legend.position = 'bottom',axis.text.y = element_blank(),axis.ticks.length.y = unit(0,'cm'),
+        panel.border = element_blank(),panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA)) + 
+  ylab('') + xlab('DPH') +
+  scale_x_discrete(label = c(1,4,7,14,21,28,35,42)) +
+  guides(fill = guide_legend(title = 'Occurrence')) +
+  scale_color_manual(values = c('#ededed','#3C54881f','#3C5488ff')) 
+layout1 <- 'AABBB'
+f42 + f41 + plot_layout(design = layout1)
+```
+
+### Figure 4B-D The UpSetR plot highlights the intersection of the genera colonized, disappeared, and presented in the four segments.
+
+
+```{r}
+# output the number of each patterns
+aggregate(numbers_pattern2$Number[numbers_pattern2$Kingdom=='Bacteria'],list(numbers_pattern2$ID[numbers_pattern2$Kingdom=='Bacteria']),sum)
+aggregate(numbers_pattern2$Number[numbers_pattern2$Kingdom=='Fungi'],list(numbers_pattern2$ID[numbers_pattern2$Kingdom=='Fungi']),sum)
+emerge <- c('ABBBBCCC','ABBBBBCC','AABBBCCC','AABBBBCC', 'AAAABBBC', 'ABBBCCCC', 'ABBCCCCC', 'AABBCCCC','AABCCCCC',
+            'ABCCCCCC','AACCCCCC', 'ACCCCCCC', 'BBBBCCCC', 'BBBBBBBC','BCCCCCCC')
+dismiss <- c('CBBBBBAA','CBBBBBBA','CAAAAAAA','CCCBBBBB','CCBBBBBB','CBBBBBBB','CCCCCCCB')
+
+Cecum_I <- c(rownames(names_16S_C)[names_16S_C$apply.format.bin_16S_C2...2..paste..collapse......%in%emerge],
+             rownames(names_ITS_C)[names_ITS_C$apply.format.bin_ITS_C2...2..paste..collapse......%in%emerge])
+Duodenum_I <- c(rownames(names_16S_D)[names_16S_D$apply.format.bin_16S_D2...2..paste..collapse......%in%emerge],
+                rownames(names_ITS_D)[names_ITS_D$apply.format.bin_ITS_D2...2..paste..collapse......%in%emerge])
+Ileum_I <- c(rownames(names_16S_I)[names_16S_I$apply.format.bin_16S_I2...2..paste..collapse......%in%emerge],
+             rownames(names_ITS_I)[names_ITS_I$apply.format.bin_ITS_I2...2..paste..collapse......%in%emerge])
+Jejunum_I <- c(rownames(names_16S_J)[names_16S_J$apply.format.bin_16S_J2...2..paste..collapse......%in%emerge],
+               rownames(names_ITS_J)[names_ITS_J$apply.format.bin_ITS_J2...2..paste..collapse......%in%emerge])
+Cecum_D <- c(rownames(names_16S_C)[names_16S_C$apply.format.bin_16S_C2...2..paste..collapse......%in%dismiss],
+             rownames(names_ITS_C)[names_ITS_C$apply.format.bin_ITS_C2...2..paste..collapse......%in%dismiss])
+Duodenum_D <- c(rownames(names_16S_D)[names_16S_D$apply.format.bin_16S_D2...2..paste..collapse......%in%dismiss],
+                rownames(names_ITS_D)[names_ITS_D$apply.format.bin_ITS_D2...2..paste..collapse......%in%dismiss])
+Ileum_D <- c(rownames(names_16S_I)[names_16S_I$apply.format.bin_16S_I2...2..paste..collapse......%in%dismiss],
+             rownames(names_ITS_I)[names_ITS_I$apply.format.bin_ITS_I2...2..paste..collapse......%in%dismiss])
+Jejunum_D <- c(rownames(names_16S_J)[names_16S_J$apply.format.bin_16S_J2...2..paste..collapse......%in%dismiss],
+               rownames(names_ITS_J)[names_ITS_J$apply.format.bin_ITS_J2...2..paste..collapse......%in%dismiss])
+Cecum_P <- c(rownames(names_16S_C)[names_16S_C$apply.format.bin_16S_C2...2..paste..collapse......=='CCCCCCCC'],
+             rownames(names_ITS_C)[names_ITS_C$apply.format.bin_ITS_C2...2..paste..collapse......=='CCCCCCCC'])
+Duodenum_P <- c(rownames(names_16S_D)[names_16S_D$apply.format.bin_16S_D2...2..paste..collapse......=='CCCCCCCC'],
+                rownames(names_ITS_D)[names_ITS_D$apply.format.bin_ITS_D2...2..paste..collapse......=='CCCCCCCC'])
+Ileum_P <- c(rownames(names_16S_I)[names_16S_I$apply.format.bin_16S_I2...2..paste..collapse......=='CCCCCCCC'],
+             rownames(names_ITS_I)[names_ITS_I$apply.format.bin_ITS_I2...2..paste..collapse......=='CCCCCCCC'])
+Jejunum_P <- c(rownames(names_16S_J)[names_16S_J$apply.format.bin_16S_J2...2..paste..collapse......=='CCCCCCCC'],
+               rownames(names_ITS_J)[names_ITS_J$apply.format.bin_ITS_J2...2..paste..collapse......=='CCCCCCCC'])
+list_P <- list(Cecum = Cecum_P,
+               Duodenum = Duodenum_P,
+               Ileum = Ileum_P,
+               Jejunum = Jejunum_P)
+list_I <- list(Cecum = Cecum_I,
+               Duodenum = Duodenum_I,
+               Ileum = Ileum_I,
+               Jejunum = Jejunum_I)
+list_D <- list(Cecum = Cecum_D,
+               Duodenum = Duodenum_D,
+               Ileum = Ileum_D,
+               Jejunum = Jejunum_D)
+f43 <- upset(fromList(list_P),order.by = 'freq',point.size = 3,
+             main.bar.color = c('gray','#8491B4',rep('gray',8)),
+             mb.ratio = c(0.7,0.3),
+             shade.color = c('gray','gray'),
+             matrix.color= c('#F39B7F'),
+             sets.bar.color=c("#E64B35","#4DBBD5","#00A087","#3C5488"))
+
+f44 <- upset(fromList(list_I),order.by = 'freq',point.size = 3,
+             main.bar.color = c('gray','gray','gray','gray','#8491B4',rep('gray',5)),
+             mb.ratio = c(0.7,0.3),
+             shade.color = c('gray','gray'),
+             matrix.color= c('#F39B7F'),
+             sets.bar.color=c("#3C5488","#E64B35","#4DBBD5","#00A087"))
+
+f45 <- upset(fromList(list_D),order.by = 'freq',point.size = 3,
+             main.bar.color = c(rep('gray',8)),
+             mb.ratio = c(0.7,0.3),
+             shade.color = c('gray','gray'),
+             matrix.color= c('#F39B7F'),
+             sets.bar.color=c("#E64B35","#00A087","#3C5488","#4DBBD5"))
+
+f43 
+f44
+f45 
+```
+
+### Figure S8 Absolute abundance of the genera belonging to the “core” pattern.
+
+```{r}
+raw_16S_L6 <- read.csv('../Data/02micro/phase/level-6_bacteria.csv')
+format_16S_L6 <- raw_16S_L6 %>%
+  remove_rownames %>% 
+  column_to_rownames(var="index") %>%
+  select(-c('Group1','Group2'))%>%
+  as.matrix()
+raw_ITS_L6 <- read.csv('../Data/02micro/phase/level-6_fungi.csv')
+format_ITS_L6 <- raw_ITS_L6 %>%
+  remove_rownames %>% 
+  column_to_rownames(var="X") %>%
+  select(-c('Group1','Group2')) %>%
+  as.matrix()
+format_16S_L6 <- raw_16S_L6 %>%
+  remove_rownames %>% 
+  column_to_rownames(var="index") %>%
+  mutate(sum = rowSums(across(where(is.numeric)))) %>%
+  mutate(across(Granulicella:uncultured.bacterium.40, ~ . / sum)) %>%
+  select(-c('sum')) %>%
+  mutate(Group1 = factor(Group1, levels = c('Duodenum','Jejunum','Ileum','Cecum'))) %>%
+  select(-c('Group2'))
+format_ITS_L6 <- raw_ITS_L6 %>%
+  remove_rownames %>% 
+  column_to_rownames(var="X") %>%
+  mutate(sum = rowSums(across(where(is.numeric)))) %>%
+  mutate(across(X__:unidentified.53, ~ . / sum)) %>%
+  select(-c('sum')) %>%
+  mutate(Group1 = factor(Group1, levels = c('Duodenum','Jejunum','Ileum','Cecum'))) %>%
+  select(-c('Group2'))
+format_16S_L6_AA <- format_16S_L6
+format_ITS_L6_AA <- format_ITS_L6
+ab_temp <- read.xlsx('../Data/01qpcr/01data_for_quantitive.xlsx',sheet = 2)
+for(i in 1:nrow(ab_temp)){
+  format_16S_L6_AA[i,1:529] <- format_16S_L6[i,1:529] * 10^(ab_temp$`log10(16S)`[i])
+  format_ITS_L6_AA[i,1:603] <- format_ITS_L6[i,1:603] * 10^(ab_temp$`log10(ITS)`[i])
+}
+set_all <- unique(c(Cecum_P,Duodenum_P,Jejunum_P,Ileum_P))
+taxa1 <- read.xlsx('../Data/02micro/phase/taxa.xlsx',sheet = 1)
+taxa2 <- read.xlsx('../Data/02micro/phase/taxa.xlsx',sheet = 2)
+colnames(format_16S_L6_AA)[1:529] <- taxa1$Genus
+colnames(format_ITS_L6_AA)[1:603] <- taxa2$Genus
+format_L6_AA <- cbind(format_16S_L6_AA[,1:529],format_ITS_L6_AA)
+format_L6_AA2 <- format_L6_AA[,colnames(format_L6_AA)%in%set_all]
+dim(format_L6_AA2)
+format_L6_AA2$Segment <- c(rep(c('Cecum','Duodenum','Ileum','Jejunum'),80))
+#format_L6_AA2$DPH <- as.factor(c(rep(c(1,4,7,14,21,28,35,42),each = 40)))
+format_L6_AA3 <- melt(format_L6_AA2)
+format_L6_AA3$DPH <- rep(c(rep(c(1,4,7,14,21,28,35,42),each = 40)),18)
+format_L6_AA3$Segment <- factor(format_L6_AA3$Segment,levels = c('Duodenum','Jejunum','Ileum','Cecum'))
+ggplot(format_L6_AA3, aes(x = as.numeric(DPH), y = log10(value + 1),fill = Segment)) + 
+  geom_smooth(aes(y = log10(value + 1), colour=Segment)) + 
+  facet_wrap(.~variable) +
+  scale_fill_manual(values = c('#E64B35','#4DBBD5','#00A087','#3C5488')) +
+  scale_color_manual(values = c('#E64B35','#4DBBD5','#00A087','#3C5488')) +
+  theme_bw() +
+  ylab('Log10(abundance)') + 
+  xlab("Time point") + 
+  theme(panel.grid.major = element_line(color = NA), panel.grid.minor = element_line(color = NA),
+        legend.position = c(0.8,0.1)) +
+  scale_x_continuous(breaks = c(1,7,14,21,28,35,42))
+```
+
