@@ -9,6 +9,7 @@ R4.1.0
 ## List of R packages used in this study
 | Package              | Version | 
 | -------------------- | ------- | 
+| agricolae            | 1.3-5   | 
 | ape                  | 5.6-1   | 
 | BiocManager          | 1.30.16 |
 | Cairo                | 1.5-14  |
